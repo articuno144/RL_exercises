@@ -15,36 +15,22 @@ from keras import backend as K
 import gym
 import matplotlib.pyplot as plt
 
-
-# In[42]:
-
-
 # initialize variables
 n_actions = 2
 
 
-# In[54]:
-
-
-env = gym.make("Pong-v0")
+env = gym.make("SpaceInvaders-v0")
 observation = env.reset()
 prev_s = None
-
-
-# In[44]:
-
 
 def prepro(I):
     """ prepro 210x160x3 uint8 frame into 6400 (80x80) 1D float vector """
     I = I[35:195] # crop
     I = I[::2,::2,0] # downsample by factor of 2
-    I[I == 144] = 0 # erase background (background type 1)
-    I[I == 109] = 0 # erase background (background type 2)
+    I[I < 50] = 0 # erase background (background type 1)
+    #I[I > 100] = 0 # erase background (background type 2)
     I[I != 0] = 1 # everything else (paddles, ball) just set to 1
     return I
-
-
-# In[45]:
 
 
 img = keras.layers.Input(shape=(80,80,1))
@@ -62,10 +48,7 @@ model = keras.models.Model(inputs=[img, input2], outputs=out)
 model.summary()
 
 model.compile(loss='mean_squared_error',
-              optimizer=keras.optimizers.Adam(lr=0.0001))
-
-
-# In[47]:
+              optimizer=keras.optimizers.Adam())
 
 
 def Q(s,n_a):
@@ -83,25 +66,21 @@ def sigmoid(x):
     return 1.0 / (1.0 + np.exp(-x))
 
 
-# In[50]:
-
 
 def act(Q):
     """pick action based on Q"""
     epsilon = 0.0001
     if np.sum(np.absolute(Q))< epsilon:
         return np.random.randint(2)
-    elif np.random.uniform()<0.7:
-        tendency = (Q[1] - Q[0])*50/np.sum(np.abs(Q))
-        if np.random.uniform()<sigmoid(tendency):
+    elif np.random.uniform()<0.85:
+        #tendency = (Q[1] - Q[0])*50/np.sum(np.abs(Q))
+        #if np.random.uniform()<sigmoid(tendency):
+        if Q[1] > Q[0]:
         	return 1
         else:
         	return 0
     else:
         return np.random.randint(2)
-
-
-# In[51]:
 
 
 def discount_rewards(r):
@@ -115,15 +94,11 @@ def discount_rewards(r):
     return discounted_r
 
 
-# In[52]:
-
-
 states,actions,rewards = [],[],[]
 episode_number = 0
 
 
-# In[55]:
-render = False
+render = True
 history = []
 plt.ion()
 plt.hold(False)
