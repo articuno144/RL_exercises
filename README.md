@@ -1,1 +1,1 @@
-# rsc1_exercise
+# RL_exercises
