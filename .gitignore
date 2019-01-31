@@ -2,3 +2,9 @@
 \.vscode/
 
 atari/__pycache__/
+
+atari/\.DS_Store
+
+atari/logdir/
+
+atari/save/Pong-v0/

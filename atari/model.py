@@ -8,7 +8,12 @@ from keras.layers import Conv2D, MaxPooling2D
 from keras import backend as K
 
 
-EXPLOITATION_PROBABILITY = 0.8
+DESPERATION_R = -0.8
+
+
+def softmax(arr):
+    exp_arr = np.exp(arr)
+    return exp_arr / np.sum(exp_arr)
 
 
 class Model:
@@ -25,7 +30,7 @@ class Model:
         self.n_actions = n_actions
         self.model = self.network()
         self.model.compile(loss='mean_squared_error',
-                            optimizer=keras.optimizers.Adam(lr=0.0001))
+                           optimizer=keras.optimizers.Adam(lr=0.0001))
         if verbose:
             self.model.summary()
 
@@ -57,16 +62,10 @@ class Model:
 
     def act(self, Q):
         """pick action based on Q"""
-        epsilon = 1e-7
-        if np.sum(np.absolute(Q)) < epsilon:
-            return np.random.randint(2)
-        elif np.random.uniform() < EXPLOITATION_PROBABILITY:
-            if Q[1] > Q[0]:
-                return 1
-            else:
-                return 0
-        else:
-            return np.random.randint(2)
+        if np.max(Q) < DESPERATION_R:
+            return np.random.randint(self.n_actions)
+        # return list(np.random.uniform() > np.cumsum(softmax(Q))).index(False)
+        return 0 if Q[0] > Q[1] else 1
 
     def save(self, game, dir="save.h5"):
         assert type(game) is str, "The name of the game should be a string"
@@ -77,8 +76,9 @@ class Model:
         self.model.save("save/"+game+"/"+dir)
 
     def load(self, game, dir="save.h5"):
+        del self.model
         self.model = load_model("save/"+game+"/"+dir)
 
 
 if __name__ == "__main__":
-    model = Model([20, 20], 2)
+    model = Model([80, 80, 1], 2)
