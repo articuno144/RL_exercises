@@ -1,12 +1,15 @@
 import gym
 import numpy as np
+import tensorflow as tf
 from model import Model
-
 
 LOAD = True
 SAVE = True
 VERBOSE = True
 GAME = "Pong-v0"
+GAMMA = 0.98
+RENDER = False
+
 
 def prepro(I):
     """ 
@@ -31,33 +34,46 @@ def discount_rewards(r):
     for t in reversed(range(0, r.size)):
         if r[t] != 0:
             running_add = 0
-        running_add = running_add * 0.98 + r[t]
+        running_add = running_add * GAMMA + r[t]
         discounted_r[t] = running_add
     return discounted_r
 
 
-def main():
-    env = gym.make(GAME)
-    n_actions = 2  # somehow the action space has a default size of 6, will check
-    input_shape = [80, 80, 1]  # after prepro
+def train(game, reward_func, model=None, input_shape=None, n_actions=None, verbose=False, save=True, load=True, render=False, prepro=None, batch_episode=10, epoch_per_batch=1):
+    if prepro is not None:
+        assert input_shape is not None, "if you specify a preprocess function, you must also specify the input shape after preprocessing"
+    model = model(input_shape, n_actions, verbose=verbose)
+    if load:
+        tf.reset_default_graph()
+        model.load(game)
+    env = gym.make(game)
+    if input_shape is None:
+        input_shape = list(env.observation_space.shape)
+    if n_actions is None:
+        n_actions = env.action_space.n
+
+    sess = tf.Session()
+    writer = tf.summary.FileWriter("logdir", sess.graph)
+    indicator_ph = tf.placeholder(tf.int16)
+    tf.summary.scalar("indicator", indicator_ph)
+    merged = tf.summary.merge_all()
+
     observation = env.reset()
-    model = Model(input_shape, n_actions, verbose=VERBOSE)
-    if LOAD:
-        model.load(GAME)
     states, actions, rewards = [], [], []
     episode_number = 0
-    positive_score = 0
-    render = False
+    indicator = 0
+    render = render
     history = []
     epi_reward = None
     prev_s = None
     while True:
         if render or episode_number % 50 == 49:
             env.render()
-        cur_s = prepro(observation).reshape([80, 80, 1])
-        s = cur_s - prev_s if prev_s is not None else np.zeros([80, 80, 1])
+        if prepro is not None:
+            cur_s = prepro(observation).reshape(input_shape)
+        s = cur_s - prev_s if prev_s is not None else np.zeros(input_shape)
         prev_s = cur_s
-        s = s.reshape([1, 80, 80, 1])
+        s = s.reshape([1]+input_shape)
         q = model.Q(s)
         a = model.act(q)
         observation, reward, done, _ = env.step(a+2)
@@ -67,7 +83,7 @@ def main():
         actions.append(action)
         rewards.append(reward)
         if reward == 1:
-            positive_score += 1
+            indicator += 1
         if done:
             episode_number += 1
             if epi_reward == None:
@@ -77,23 +93,26 @@ def main():
                 epi_reward = np.sum(rewards)-prev_sum
                 prev_sum = np.sum(rewards)
             history.append(epi_reward)
-            if np.sum(rewards) > 10:
+            if np.sum(rewards) > 16:
                 render = True
-            if episode_number % 10 == 0:
+            if episode_number % batch_episode == 0:
                 eps = np.vstack(states)
                 epa = np.vstack(actions)
-                epr = discount_rewards(np.vstack(rewards))
+                epr = reward_func(np.vstack(rewards))
                 states, actions, rewards = [], [], []
                 epi_reward = None
                 print("episode {} finished, total positive score: {}".format(
-                    episode_number, positive_score))
-                model.model.fit(x=[eps, epa], y=epr, epochs=1, verbose=VERBOSE)
-                positive_score = 0
-                if SAVE:
-                    model.save(game=GAME)
+                    episode_number, indicator))
+                model.model.fit(x=[eps, epa], y=epr,
+                                epochs=epoch_per_batch, verbose=verbose)
+                summary = sess.run(merged, feed_dict={indicator_ph: indicator})
+                writer.add_summary(summary, episode_number)
+                indicator = 0
+                if save:
+                    model.save(game)
             observation = env.reset()
-            prev_s = None
 
 
 if __name__ == "__main__":
-    main()
+    train(GAME, discount_rewards, Model, input_shape=[
+          80, 80, 1], n_actions=2, verbose=VERBOSE, save=SAVE, load=LOAD, render=RENDER, prepro=prepro, batch_episode=10, epoch_per_batch=1)
