@@ -8,3 +8,5 @@ atari/\.DS_Store
 atari/logdir/
 
 atari/save/Pong-v0/
+
+logdir/

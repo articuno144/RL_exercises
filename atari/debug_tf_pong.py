@@ -15,7 +15,7 @@ SAVE = True
 VERBOSE = True
 GAME = "Pong-v0"
 GAMMA = 0.98
-RENDER = True
+RENDER = False
 BATCH_EPISODE = 1
 
 
@@ -42,19 +42,21 @@ class PolicyGradient:
         with tf.variable_scope("mlp", reuse=reuse):
             x = tf.layers.flatten(self.x)
             x = tf.layers.dense(x, hidden_units, activation='relu')
-            x = tf.layers.dense(x, output_shape[0], activation='linear')
-            x = tf.nn.log_softmax(x)
+            self.logits = tf.layers.dense(x, output_shape[0], activation='linear')
+            x = tf.nn.log_softmax(self.logits)
             a = tf.reshape(tf.cast(tf.multinomial(
                 x, 1), tf.int32), [-1])  # (batch,)
             self.prob_a = tf.gather_nd(x, tf.transpose([
                 tf.range(tf.shape(x)[0]), a]))  # (batch,)
             self.train_vars = tf.trainable_variables()
             prob_grad = tf.gradients(self.prob_a, self.train_vars)
+            self.actual_proba = tf.exp(self.prob_a)
             return prob_grad, a
 
     def run(self, state, reuse=tf.AUTO_REUSE):
-        prob_grad, a, prob_a = self.sess.run(
-            [self.prob_grad, self.a, self.prob_a], feed_dict={self.x: state})
+        p, logits, prob_grad, a, prob_a = self.sess.run(
+            [self.actual_proba, self.logits, self.prob_grad, self.a, self.prob_a], feed_dict={self.x: state})
+        print(p, logits, prob_a, a)
         self.prob_grads.append(prob_grad)
         self.prob_as.append(prob_a)
         return a
